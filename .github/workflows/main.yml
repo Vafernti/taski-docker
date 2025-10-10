@@ -155,60 +155,60 @@ jobs:
           tags: vafernti/taski_gateway:latest
   
   deploy:
-  runs-on: ubuntu-latest
-  needs:
-    - build_and_push_to_docker_hub
-    - build_frontend_and_push_to_docker_hub
-    - build_gateway_and_push_to_docker_hub
+    runs-on: ubuntu-latest
+    needs:
+      - build_and_push_to_docker_hub
+      - build_frontend_and_push_to_docker_hub
+      - build_gateway_and_push_to_docker_hub
 
-  steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    - name: Prep SSH key (remove passphrase only in runner)
-      shell: bash
-      run: |
-        set -euo pipefail
-        umask 077
-        mkdir -p ~/.ssh
-        # 1) кладём ключ как есть (из секретов)
-        printf '%s' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
-        # нормализуем переносы строк на всякий
-        tr -d '\r' < ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.tmp && mv ~/.ssh/id_ed25519.tmp ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
+      - name: Prep SSH key (remove passphrase only in runner)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          # 1) кладём ключ как есть (из секретов)
+          printf '%s' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          # нормализуем переносы строк на всякий
+          tr -d '\r' < ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.tmp && mv ~/.ssh/id_ed25519.tmp ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
 
-        # 2) снимаем passphrase (требует верный $SSH_PASSPHRASE)
-        ssh-keygen -p \
-          -P "${{ secrets.SSH_PASSPHRASE }}" \
-          -N "" \
-          -f ~/.ssh/id_ed25519
+          # 2) снимаем passphrase (требует верный $SSH_PASSPHRASE)
+          ssh-keygen -p \
+            -P "${{ secrets.SSH_PASSPHRASE }}" \
+            -N "" \
+            -f ~/.ssh/id_ed25519
 
-        # 3) known_hosts
-        ssh-keyscan -H "${{ secrets.HOST }}" >> ~/.ssh/known_hosts
+          # 3) known_hosts
+          ssh-keyscan -H "${{ secrets.HOST }}" >> ~/.ssh/known_hosts
 
-    - name: Ensure target dir exists
-      run: |
-        ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
-          "${{ secrets.USER }}@${{ secrets.HOST }}" \
-          'mkdir -p ~/taski'
+      - name: Ensure target dir exists
+        run: |
+          ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
+            "${{ secrets.USER }}@${{ secrets.HOST }}" \
+            'mkdir -p ~/taski'
 
-    - name: Copy compose file
-      run: |
-        scp -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
-          docker-compose.production.yml \
-          "${{ secrets.USER }}@${{ secrets.HOST }}:~/taski/"
+      - name: Copy compose file
+        run: |
+          scp -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
+            docker-compose.production.yml \
+            "${{ secrets.USER }}@${{ secrets.HOST }}:~/taski/"
 
-    - name: Deploy
-      run: |
-        ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
-          "${{ secrets.USER }}@${{ secrets.HOST }}" \
-          'cd ~/taski && \
-           sudo docker compose -f docker-compose.production.yml pull && \
-           sudo docker compose -f docker-compose.production.yml down && \
-           sudo docker compose -f docker-compose.production.yml up -d --remove-orphans && \
-           sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py migrate --noinput && \
-           sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py collectstatic --noinput && \
-           sudo docker compose -f docker-compose.production.yml exec -T backend sh -lc "cp -r /app/collected_static/. /backend_static/static/"'
+      - name: Deploy
+        run: |
+          ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519 \
+            "${{ secrets.USER }}@${{ secrets.HOST }}" \
+            'cd ~/taski && \
+            sudo docker compose -f docker-compose.production.yml pull && \
+            sudo docker compose -f docker-compose.production.yml down && \
+            sudo docker compose -f docker-compose.production.yml up -d --remove-orphans && \
+            sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py migrate --noinput && \
+            sudo docker compose -f docker-compose.production.yml exec -T backend python manage.py collectstatic --noinput && \
+            sudo docker compose -f docker-compose.production.yml exec -T backend sh -lc "cp -r /app/collected_static/. /backend_static/static/"'
 
   send_message:
     runs-on: ubuntu-latest
